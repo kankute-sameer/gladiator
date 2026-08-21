@@ -37,7 +37,7 @@ _STAGE1_PHRASES: tuple[str, ...] = tuple(
     )
 )
 
-_WAKE_NEIGHBOURS = frozenset({"gladiator", "glad iator"})
+_WAKE_NEIGHBOURS = frozenset({"gladiator", "glad iator", "clad", "glad clad", "glad clad iator", "glaad"})
 _NON_ADDRESSING_NEIGHBOURS = frozenset({"glide"})
 
 _WORD_RE = re.compile(r"[a-z0-9']+")
