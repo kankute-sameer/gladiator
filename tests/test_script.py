@@ -38,7 +38,28 @@ def test_valid_set_loads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert question_set.version == 1
     assert [q.id for q in question_set.questions] == ["budget", "timeline"]
     assert question_set.get("budget").text == "What's your budget?"
+    assert question_set.get("budget").notes is None
     assert question_set.namespaced_id("budget") == "test_set.budget"
+
+
+def test_optional_notes_are_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_set(
+        tmp_path,
+        {
+            "id": "test_set",
+            "version": 1,
+            "questions": [
+                {
+                    "id": "income",
+                    "text": "What's your income?",
+                    "notes": "Gross annual, USD.",
+                },
+            ],
+        },
+    )
+
+    question_set = _load_from(tmp_path, monkeypatch)
+    assert question_set.get("income").notes == "Gross annual, USD."
 
 
 def test_duplicate_ids_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

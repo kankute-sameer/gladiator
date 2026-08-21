@@ -39,6 +39,11 @@ _PHANTOM_INPUTS = frozenset(
         "i'm going to the store",
     }
 )
+_PHANTOM_CORRECTION = (
+    "[Nobody in the room said that — it was a glitch. Stay in the "
+    "conversation. Continue with any pending questions. Do not go_dormant "
+    "and do not sign off.]"
+)
 
 
 def is_phantom_input(text: str) -> bool:
@@ -102,6 +107,7 @@ class LiveSession:
         self._turn_pending = False
         self._open_when_idle = False
         self._discard_turn = False
+        self._logged_phantom_output = False
 
     @property
     def activity_open(self) -> bool:
@@ -317,8 +323,13 @@ class LiveSession:
 
                             if content.output_transcription and content.output_transcription.text:
                                 text = content.output_transcription.text
-                                logger.info("Gemini said: %s", text)
-                                events.emit("output_transcript", text=text)
+                                if self._discard_turn:
+                                    if not self._logged_phantom_output:
+                                        logger.info("Not playing Glad's reply — Gemini phantom input")
+                                        self._logged_phantom_output = True
+                                else:
+                                    logger.info("Gemini said: %s", text)
+                                    events.emit("output_transcript", text=text)
 
                             if content.grounding_metadata is not None:
                                 turn_grounded = True
@@ -327,6 +338,7 @@ class LiveSession:
                                 turn_grounded = False
                                 self._turn_pending = False
                                 self._discard_turn = False
+                                self._logged_phantom_output = False
                                 yield b"", True, False
                                 if self._open_when_idle:
                                     await self.open_window()
@@ -336,10 +348,14 @@ class LiveSession:
                                     if part.inline_data and part.inline_data.data:
                                         yield part.inline_data.data, False, turn_grounded
                             if content.turn_complete:
+                                discarded = self._discard_turn
                                 self._turn_pending = False
                                 self._discard_turn = False
+                                self._logged_phantom_output = False
                                 yield b"", False, turn_grounded
                                 turn_grounded = False
+                                if discarded:
+                                    await self.send_text(_PHANTOM_CORRECTION)
                                 if self._open_when_idle:
                                     await self.open_window()
             except Exception as exc:

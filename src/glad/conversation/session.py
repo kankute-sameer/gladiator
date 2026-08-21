@@ -22,6 +22,7 @@ _QUESTION_SETS_DIR = Path(__file__).resolve().parents[3] / "question_sets"
 class Question:
     id: str
     text: str
+    notes: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,15 +71,21 @@ def _parse(raw: Any, *, source: str) -> QuestionSet:
             raise ValueError(f"{source}: question set {set_id!r} has a non-mapping question entry")
         qid = entry.get("id")
         text = entry.get("text")
+        notes = entry.get("notes")
         if not qid or not isinstance(qid, str):
             raise ValueError(f"{source}: question set {set_id!r} has a question with no string 'id'")
         if not text or not isinstance(text, str):
             raise ValueError(f"{source}: question set {set_id!r} question {qid!r} has no string 'text'")
+        if notes is not None and not isinstance(notes, str):
+            raise ValueError(f"{source}: question set {set_id!r} question {qid!r} has non-string 'notes'")
+        notes = notes.strip() if isinstance(notes, str) else None
+        if notes == "":
+            notes = None
 
         if not _ID_PATTERN.match(qid):
             invalid_ids.append(qid)
         seen_counts[qid] = seen_counts.get(qid, 0) + 1
-        questions.append(Question(id=qid, text=text))
+        questions.append(Question(id=qid, text=text, notes=notes))
 
     if invalid_ids:
         raise ValueError(

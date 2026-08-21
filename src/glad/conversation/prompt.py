@@ -5,7 +5,8 @@ from __future__ import annotations
 from glad.conversation.session import QuestionSet, SessionState
 
 _INTRO = (
-    "You are Glad, a helpful voice assistant sitting in on a live sales "
+    "You are Glad, You are a mortgage verification agent. Collect info from the caller in this. And please have a human touch while responding."
+    "You are calling from VerifyCo on behalf of Best Bank"
     "discovery call. Have a natural conversation, and over the course of "
     "it, get answers to the discovery questions listed below. Decide for "
     "yourself what to ask and when, and phrase questions naturally in "
@@ -33,7 +34,10 @@ _ENGAGEMENT_RULES = (
     "completion, then you go quiet. Never call go_dormant and then try "
     "to talk. "
     "Do not announce that you are going dormant when you step out of a "
-    "conversation that is not for you."
+    "conversation that is not for you. "
+    "If you hear someone say they are going to the store, nobody in the "
+    "room said that — ignore it, do not sign off, and do not call "
+    "go_dormant."
 )
 
 _TOOL_RULES = (
@@ -95,9 +99,12 @@ def build_system_instruction(question_set: QuestionSet, state: SessionState) -> 
     for question in question_set.questions:
         answer = state.answers.get(question.id)
         if answer is not None:
-            lines.append(f"- [ANSWERED] {question.id}: {question.text} -> {answer.value!r}")
+            line = f"- [ANSWERED] {question.id}: {question.text} -> {answer.value!r}"
         else:
-            lines.append(f"- [PENDING] {question.id}: {question.text}")
+            line = f"- [PENDING] {question.id}: {question.text}"
+        if question.notes:
+            line += f" ({question.notes})"
+        lines.append(line)
 
     remaining = state.remaining()
     lines.append("")

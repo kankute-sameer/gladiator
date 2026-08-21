@@ -5,7 +5,8 @@ near-misses on word boundaries, longest phrase first so "gladiator" never
 decomposes into a "glad" match.
 
 Stage 2 (`_disambiguate`) answers the real question: was Glad addressed,
-or is this the politeness word ("glad to help", "so glad you called")?
+or is this the politeness word ("glad to help", "so glad you called") /
+an unrelated neighbour ("we watched Gladiator")?
 It's an explicit rule list rather than a single regex, so the rules
 double as documentation of what counts as a vocative use.
 
@@ -20,9 +21,10 @@ from dataclasses import dataclass
 from enum import Enum
 
 # Longest-first: "gladiator" must be tried before "glad" or the shorter
-# phrase would match its prefix. "gladiator"/"glad iator" ARE accepted as
-# a vocative (common ASR of the name). "clad" is also a common ASR of
-# "Glad" and goes through the same vocative rules. "glide" is not.
+# phrase would match its prefix. "gladiator"/"glad iator" can be ASR of
+# the name, but they still need a vocative cue — otherwise "we watched
+# Gladiator last night" would wake. "clad" is a common ASR of "Glad" and
+# goes through the same vocative rules. "glide" is not.
 _STAGE1_PHRASES: tuple[str, ...] = tuple(
     sorted(
         [
@@ -31,14 +33,19 @@ _STAGE1_PHRASES: tuple[str, ...] = tuple(
             "glad",
             "clad",
             "glide",
+            "clap",
+            "flat"
         ],
         key=len,
         reverse=True,
     )
 )
 
-_WAKE_NEIGHBOURS = frozenset({"gladiator", "glad iator", "clad", "glad clad", "glad clad iator", "glaad"})
 _NON_ADDRESSING_NEIGHBOURS = frozenset({"glide"})
+# Real English words that ASR sometimes uses for "Glad". Matching them
+# is not enough: they still need hey/hi, a question, or an imperative.
+# Utterance-initial position alone must not wake ("Gladiator last night…").
+_WEAK_ASR_NEIGHBOURS = frozenset({"gladiator", "glad iator"})
 
 _WORD_RE = re.compile(r"[a-z0-9']+")
 
@@ -194,8 +201,6 @@ def _disambiguate(tokens: list[str], match: Stage1Match) -> Stage2Verdict:
     reason a match is suppressed or accepted -- this list is the spec."""
     if match.phrase in _NON_ADDRESSING_NEIGHBOURS:
         return Stage2Verdict.SUPPRESSED_NON_ADDRESSING_NEIGHBOUR
-    if match.phrase in _WAKE_NEIGHBOURS:
-        return Stage2Verdict.ACCEPTED
 
     preceding = tokens[match.start_token - 1] if match.start_token > 0 else None
     if preceding in _NEGATIVE_PRECEDERS:
@@ -214,7 +219,9 @@ def _disambiguate(tokens: list[str], match: Stage1Match) -> Stage2Verdict:
         return Stage2Verdict.ACCEPTED
 
     # Positive signal 1: utterance-initial position ("Glad, ..." / "Glad?").
-    if match.start_token == 0:
+    # Weak ASR neighbours skip this: "Gladiator last night was great" is
+    # not an address even at the start of the utterance.
+    if match.start_token == 0 and match.phrase not in _WEAK_ASR_NEIGHBOURS:
         return Stage2Verdict.ACCEPTED
 
     # Positive signal 2: an interrogative or imperative in the next few

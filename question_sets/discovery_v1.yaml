@@ -7,7 +7,7 @@ questions:
     text: "What is your date of birth?"
   - id: current_employer
     text: "Who is your current employer?"
-  - id: annual_income
-    text: "What is your approximate annual income?"
   - id: employment_start_date
     text: "When did you start working for your current employer?"
+  - id: current_address
+    text: "What is your current residential address?"

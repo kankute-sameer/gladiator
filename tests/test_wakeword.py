@@ -21,7 +21,8 @@ _REAL_VOCATIVES = [
     "glad you there",
     "Glad, you there?",
     "Hey Glad, you there?",
-    "gladiator",
+    "hey gladiator",
+    "Gladiator, you there?",
     "Glad iator, you there?",
     "clad",
     "hey clad",
@@ -71,15 +72,26 @@ def test_fixture_covers_at_least_twenty_utterances() -> None:
     assert len(_REAL_VOCATIVES) + len(_ADJECTIVAL_USES) >= 20
 
 
-def test_gladiator_wakes_and_does_not_also_match_glad() -> None:
-    result = detect("gladiator")
+def test_gladiator_as_movie_title_does_not_wake() -> None:
+    for utterance in (
+        "We watched Gladiator last night",
+        "gladiator last night was great",
+        "gladiator",
+    ):
+        result = detect(utterance)
+        assert not result.woken, f"expected suppression for {utterance!r}, got verdict={result.verdict}"
+        assert result.stage1_matches[0].phrase == "gladiator"
+
+
+def test_gladiator_wakes_when_addressed_and_does_not_also_match_glad() -> None:
+    result = detect("hey gladiator")
     assert result.woken
     assert result.stage1_matches[0].phrase == "gladiator"
     assert len(result.stage1_matches) == 1
 
 
-def test_glad_iator_split_across_tokens_wakes() -> None:
-    result = detect("glad iator")
+def test_glad_iator_split_across_tokens_wakes_when_addressed() -> None:
+    result = detect("Glad iator, you there?")
     assert result.woken
     assert result.stage1_matches[0].phrase == "glad iator"
 

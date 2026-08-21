@@ -29,7 +29,7 @@ from glad.conversation.turn import (
 )
 from glad.conversation.wakeword import WakeWordResult, describe_verdict, detect as detect_wakeword
 from glad.live.session import LiveSession
-from glad.logging import get_logger
+from glad.logging import get_logger, set_engagement
 from glad.obs import events, metrics
 from glad.transport import outbound
 from glad.transport.schemas import AudioFrame, TranscriptSegment
@@ -105,14 +105,17 @@ class Orchestrator:
         }.get(self.engagement.engaged_by or "", self.engagement.engaged_by or "unknown")
 
     def _flags(self) -> str:
-        engaged = "ENGAGED" if self.engagement.is_engaged() else "DORMANT"
+        self._sync_engagement()
         floor = {
             "ambient": "idle",
             "wake_pending": "WAKE_PENDING",
             "speaking": "SPEAKING",
             "yielded": "YIELDED",
         }.get(self._floor.state.value, self._floor.state.value)
-        return f"[{engaged} | floor={floor} | {self._questions_left()}]"
+        return f"[floor={floor} | {self._questions_left()}]"
+
+    def _sync_engagement(self) -> None:
+        set_engagement(self.engagement.is_engaged())
 
     def bind_live(self, live: LiveSession) -> None:
         self._live = live
@@ -134,6 +137,7 @@ class Orchestrator:
                 "participant_name": speaker_name,
             }
         previous = self.state.answers.get(args.get("question_id")) if name == "record_answer" else None
+        self._sync_engagement()
         self._log_tool_call(name, args)
         result = dispatch(name, args, self.state)
 
@@ -200,6 +204,7 @@ class Orchestrator:
         self._floor.on_turn_complete(listening=False)
         if result.get("was_engaged"):
             events.emit("engagement.closed", reason=why or "dismissed")
+        self._sync_engagement()
 
     async def _handle_record_answer_result(self, args: dict[str, Any], previous: Answer | None) -> None:
         answer = self.state.answers.get(args.get("question_id"))
@@ -238,6 +243,7 @@ class Orchestrator:
         """Mix speakers, drive floor/wake, and forward to Gemini only while ENGAGED."""
         assert self._live is not None, "bind_live() must be called before frames arrive"
         t_recv = time.monotonic()
+        self._sync_engagement()
         await self._note_participant(frame.participant_id, frame.participant_name)
         level = self._activity.observe(frame.participant_id, frame.pcm, t_recv)
         if level >= _SPEECH_RMS_THRESHOLD:
@@ -337,6 +343,7 @@ class Orchestrator:
 
     def _open_engagement(self, trigger: str, now: float | None = None) -> None:
         opened = self.engagement.extend(trigger, now)
+        self._sync_engagement()
         if opened:
             events.emit("engagement.opened", trigger=trigger)
             logger.info("DORMANT → ENGAGED (%s) %s", self._why_engaged(), self._flags())
@@ -371,6 +378,7 @@ class Orchestrator:
         await self._live.send_text(self._with_roster(text))
 
     async def on_transcript_segment(self, segment: TranscriptSegment) -> None:
+        self._sync_engagement()
         result = detect_wakeword(segment.text)
         if result.woken:
             logger.info('%s: %r — that sounds like Glad\'s name', segment.participant_name, segment.text)
