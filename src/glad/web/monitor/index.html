@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Glad Monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/monitor/styles.css" />
+</head>
+<body>
+  <header id="topbar">
+    <h1>Glad Monitor</h1>
+
+    <div class="mode-toggle">
+      <button id="mode-live" class="mode-btn" type="button">Live</button>
+      <button id="mode-replay" class="mode-btn" type="button">Replay</button>
+    </div>
+
+    <label class="run-picker">
+      Run:
+      <select id="run-select"></select>
+    </label>
+
+    <span id="conn-status" class="pill pill-unknown">--</span>
+    <span id="run-summary"></span>
+  </header>
+
+  <main>
+    <section id="panel-latency" class="panel">
+      <h2>Latency</h2>
+      <p class="panel-note">Every <code>glad_*_ms</code> metric seen in this run. n / p50 / p95 / p99, milliseconds.</p>
+      <table id="latency-table">
+        <thead>
+          <tr><th>stage</th><th>n</th><th>p50</th><th>p95</th><th>p99</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="panel-timeline" class="panel panel-wide">
+      <h2>Timeline</h2>
+      <div id="timeline-legend" class="legend"></div>
+      <div id="timeline-scroll" class="timeline-scroll">
+        <svg id="timeline-svg" width="100%" height="150"></svg>
+      </div>
+      <div id="timeline-empty" class="empty-note">No timeline events yet.</div>
+    </section>
+
+    <section id="panel-answers" class="panel">
+      <h2>Answers</h2>
+      <p class="panel-note">Revision &gt; 2 means Glad failed to recognise an earlier answer and re-asked.</p>
+      <table id="answers-table">
+        <thead>
+          <tr><th>question</th><th>value</th><th>rev</th><th>recorded at</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="panel-roster" class="panel">
+      <h2>Roster</h2>
+      <p class="panel-note">Who has been in this call. People who left stay listed with a leave time.</p>
+      <table id="roster-table">
+        <thead>
+          <tr><th>name</th><th>host</th><th>joined</th><th>left</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="panel-audio" class="panel">
+      <h2>Audio health</h2>
+      <div class="audio-stats">
+        <div><span class="stat-label">underruns</span><span id="stat-underruns" class="stat-value">--</span></div>
+        <div><span class="stat-label">flush→ack p50 / p95</span><span id="stat-flush" class="stat-value">--</span></div>
+        <div><span class="stat-label">buffer depth p50 / p95</span><span id="stat-depth" class="stat-value">--</span></div>
+      </div>
+      <svg id="depth-svg" width="100%" height="120"></svg>
+      <div id="depth-empty" class="empty-note">No buffer-depth samples yet.</div>
+    </section>
+
+    <section id="panel-events" class="panel panel-wide">
+      <h2>Event log</h2>
+      <div class="event-controls">
+        <input id="event-filter" type="text" placeholder="filter by event type (substring)…" />
+        <span id="event-count" class="event-count"></span>
+      </div>
+      <div id="event-log" class="event-log"></div>
+    </section>
+  </main>
+
+  <script src="/monitor/app.js"></script>
+</body>
+</html>

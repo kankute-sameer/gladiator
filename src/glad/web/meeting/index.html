@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glad</title>
+  <style>
+    /* Recall / Meet captures this page as ~1280x720 video. Everything
+       must fit in 100vh with no scroll, and stay readable after compression. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000000;
+      color: #ffffff;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      height: 100vh;
+      height: 100dvh;
+      padding: 2.4vh 3.2vw 2.8vh;
+      gap: 1.6vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 2vw;
+      flex-shrink: 0;
+      text-align: left;
+    }
+
+    h1 {
+      font-size: clamp(36px, 7.2vh, 64px);
+      font-weight: 700;
+      margin: 0;
+      line-height: 0.95;
+      flex-shrink: 0;
+    }
+
+    .meta {
+      text-align: right;
+      min-width: 0;
+    }
+
+    #status {
+      font-size: clamp(18px, 3.4vh, 32px);
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    #buffer-depth {
+      font-size: clamp(14px, 2.6vh, 24px);
+      margin-top: 0.4vh;
+      color: #9ad1ff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #levels {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2vh;
+      flex-shrink: 0;
+    }
+
+    .level-row {
+      text-align: left;
+    }
+
+    .level-name {
+      font-size: clamp(18px, 3.2vh, 28px);
+      font-weight: 600;
+      margin-bottom: 0.4vh;
+    }
+
+    .level-track {
+      width: 100%;
+      height: clamp(18px, 4vh, 36px);
+      background: #222222;
+      border: 2px solid #ffffff;
+      box-sizing: border-box;
+    }
+
+    .level-fill {
+      height: 100%;
+      width: 0%;
+      background: #33ff66;
+      transition: width 80ms linear;
+    }
+
+    #questions {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1vh;
+      overflow: hidden;
+      justify-content: flex-end;
+    }
+
+    .question-row {
+      text-align: left;
+      padding: 1.4vh 1.6vw;
+      border-radius: 10px;
+      background: #1c1c1c;
+      flex-shrink: 1;
+      min-height: 0;
+    }
+
+    .question-row.answered {
+      background: #123a20;
+    }
+
+    .question-text {
+      font-size: clamp(20px, 3.8vh, 36px);
+      font-weight: 600;
+      line-height: 1.15;
+      color: #e6e6e6;
+    }
+
+    .question-answer {
+      font-size: clamp(20px, 3.8vh, 36px);
+      font-weight: 700;
+      margin-top: 0.6vh;
+      color: #808080;
+    }
+
+    .question-row.answered .question-answer {
+      color: #4dff88;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Glad</h1>
+    <div class="meta">
+      <div id="status">Starting&hellip;</div>
+      <div id="buffer-depth">Buffer: -- ms · underruns: --</div>
+    </div>
+  </header>
+  <div id="levels"></div>
+  <div id="questions"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
