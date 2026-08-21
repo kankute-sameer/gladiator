@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from glad.agent.script import Question, QuestionSet
-from glad.agent.speaker import SpeakerTracker
+from glad.conversation.session import Question, QuestionSet
+from glad.conversation.turn import SpeakerTracker
 from glad.audio.activity import ParticipantActivity
 from glad.live.session import LiveSession
 from glad.orchestrator import Orchestrator, _SPEECH_RMS_THRESHOLD

@@ -1,18 +1,96 @@
-"""Session-scoped conversation state: what's been answered so far.
-
-No global state -- the orchestrator holds one `SessionState` per bot
-(`dict[session_id, SessionState]`), so two concurrent bots never share, or
-even see, each other's answers.
-"""
+"""Question set, roster, answers, and derived discovery/ambient mode."""
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Any
 
-from glad.agent.engagement import EngagementState
-from glad.agent.script import Question, QuestionSet
+import yaml
+
+from glad.conversation.turn import EngagementState
+
+_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+_QUESTION_SETS_DIR = Path(__file__).resolve().parents[3] / "question_sets"
+
+
+@dataclass(frozen=True, slots=True)
+class Question:
+    id: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionSet:
+    id: str
+    version: int
+    questions: tuple[Question, ...]
+
+    def get(self, question_id: str) -> Question | None:
+        for question in self.questions:
+            if question.id == question_id:
+                return question
+        return None
+
+    def namespaced_id(self, question_id: str) -> str:
+        return f"{self.id}.{question_id}"
+
+
+def load_question_set(name: str) -> QuestionSet:
+    path = _QUESTION_SETS_DIR / f"{name}.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return _parse(raw, source=str(path))
+
+
+def _parse(raw: Any, *, source: str) -> QuestionSet:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{source}: question set must be a YAML mapping, got {type(raw).__name__}")
+
+    set_id = raw.get("id")
+    if not set_id or not isinstance(set_id, str):
+        raise ValueError(f"{source}: question set is missing a string 'id'")
+
+    version = raw.get("version")
+    if not isinstance(version, int):
+        raise ValueError(f"{source}: question set {set_id!r} is missing an integer 'version'")
+
+    raw_questions = raw.get("questions")
+    if not raw_questions:
+        raise ValueError(f"{source}: question set {set_id!r} has no questions")
+
+    questions: list[Question] = []
+    seen_counts: dict[str, int] = {}
+    invalid_ids: list[str] = []
+    for entry in raw_questions:
+        if not isinstance(entry, dict):
+            raise ValueError(f"{source}: question set {set_id!r} has a non-mapping question entry")
+        qid = entry.get("id")
+        text = entry.get("text")
+        if not qid or not isinstance(qid, str):
+            raise ValueError(f"{source}: question set {set_id!r} has a question with no string 'id'")
+        if not text or not isinstance(text, str):
+            raise ValueError(f"{source}: question set {set_id!r} question {qid!r} has no string 'text'")
+
+        if not _ID_PATTERN.match(qid):
+            invalid_ids.append(qid)
+        seen_counts[qid] = seen_counts.get(qid, 0) + 1
+        questions.append(Question(id=qid, text=text))
+
+    if invalid_ids:
+        raise ValueError(
+            f"{source}: question set {set_id!r} has invalid question id(s) "
+            f"(must match {_ID_PATTERN.pattern!r}): {sorted(set(invalid_ids))}"
+        )
+
+    duplicate_ids = sorted(qid for qid, count in seen_counts.items() if count > 1)
+    if duplicate_ids:
+        raise ValueError(f"{source}: question set {set_id!r} has duplicate question id(s): {duplicate_ids}")
+
+    return QuestionSet(id=set_id, version=version, questions=tuple(questions))
 
 
 @dataclass(slots=True)
@@ -84,7 +162,6 @@ class Roster:
         return existing
 
     def note(self, participant_id: int, name: str, is_host: bool | None = None) -> bool:
-        """Mark this person present. True if they were not already in the call."""
         existing = self.get(participant_id)
         newly = existing is None or existing.left_at is not None
         self.join(participant_id, name, is_host)
@@ -121,10 +198,6 @@ class SessionState:
         participant_id: int | None = None,
         participant_name: str | None = None,
     ) -> Answer:
-        """Record one answer. Last write wins: a second call for the same
-        `question_id` overwrites in place and bumps `revision` rather than
-        creating a second entry. Raises `ValueError` for an unknown
-        `question_id`."""
         if self.question_set.get(question_id) is None:
             raise ValueError(f"Unknown question id: {question_id!r}")
 
@@ -142,5 +215,18 @@ class SessionState:
         return answer
 
     def remaining(self) -> list[Question]:
-        """Questions with no recorded answer yet, in question-set order."""
         return [q for q in self.question_set.questions if q.id not in self.answers]
+
+
+class Mode(str, Enum):
+    DISCOVERY = "discovery"
+    AMBIENT = "ambient"
+
+
+def outstanding_question(state: SessionState) -> Question | None:
+    remaining = state.remaining()
+    return remaining[0] if remaining else None
+
+
+def derive_mode(state: SessionState) -> Mode:
+    return Mode.DISCOVERY if outstanding_question(state) is not None else Mode.AMBIENT

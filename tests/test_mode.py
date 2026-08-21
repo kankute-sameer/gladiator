@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from glad.agent.mode import Mode, derive_mode, outstanding_question
-from glad.agent.script import Question, QuestionSet
-from glad.agent.state import SessionState
+from glad.conversation.session import (
+    Mode,
+    Question,
+    QuestionSet,
+    SessionState,
+    derive_mode,
+    outstanding_question,
+)
 
 _QUESTION_SET = QuestionSet(
     id="test_set",

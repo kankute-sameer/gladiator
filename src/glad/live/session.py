@@ -3,7 +3,7 @@ and barge-in signals, dispatch tool calls, and reconnect with session
 resumption on drop.
 
 Activity detection is manual (`automatic_activity_detection.disabled=True`):
-`glad.agent.floor.FloorControl` decides when a window opens or closes via
+`glad.conversation.turn.FloorControl` decides when a window opens or closes via
 `open_window` / `close_window`, not Gemini's own server-side VAD, so that
 ambient background speech never auto-triggers a spoken reply.
 """
@@ -11,6 +11,7 @@ ambient background speech never auto-triggers a spoken reply.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
@@ -27,6 +28,24 @@ logger = get_logger(__name__)
 # Routes one (tool_name, args) call to its handler; the result is sent back
 # to Gemini as the FunctionResponse.response payload.
 ToolDispatcher = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+InputTranscriptListener = Callable[[str], Awaitable[None]]
+
+# Gemini Live invents this on empty/echo activity windows. It is not room audio.
+_PHANTOM_INPUTS = frozenset(
+    {
+        "i'm going to go to the store",
+        "i am going to go to the store",
+        "going to the store",
+        "i'm going to the store",
+    }
+)
+
+
+def is_phantom_input(text: str) -> bool:
+    """True for stock Gemini Live hallucinations, not real speech."""
+    lowered = re.sub(r"[^a-z0-9'\s]", " ", text.lower())
+    normalized = re.sub(r"\s+", " ", lowered).strip()
+    return normalized in _PHANTOM_INPUTS or normalized.endswith("going to go to the store")
 
 _INPUT_MIME_TYPE = "audio/pcm;rate=16000"
 _MAX_BACKOFF_S = 30.0
@@ -59,6 +78,7 @@ class LiveSession:
         tools: Sequence[types.FunctionDeclaration] | None = None,
         tool_dispatcher: ToolDispatcher | None = None,
         voice: str = "Kore",
+        input_transcript_listener: InputTranscriptListener | None = None,
     ) -> None:
         self._client = genai.Client(api_key=api_key)
         self._model = model
@@ -68,6 +88,7 @@ class LiveSession:
         self._instruction_provider = instruction_provider
         self._tools = list(tools) if tools else None
         self._tool_dispatcher = tool_dispatcher
+        self._input_transcript_listener = input_transcript_listener
         self._session: genai.live.AsyncSession | None = None
         self._resumption_handle: str | None = None
         self._closed = False
@@ -77,6 +98,10 @@ class LiveSession:
         self._send_lock = asyncio.Lock()
         self._activity_open = False
         self._pending_context: str | None = None
+        self._window_has_content = False
+        self._turn_pending = False
+        self._open_when_idle = False
+        self._discard_turn = False
 
     @property
     def activity_open(self) -> bool:
@@ -101,6 +126,8 @@ class LiveSession:
                 await session.send_realtime_input(
                     audio=types.Blob(data=pcm, mime_type=_INPUT_MIME_TYPE)
                 )
+            if self._activity_open:
+                self._window_has_content = True
             _drop_throttle.reset()
         except Exception as exc:
             if _drop_throttle.should_log():
@@ -113,28 +140,45 @@ class LiveSession:
                     exc_info=not isinstance(exc, ConnectionClosed),
                 )
 
-    async def open_window(self) -> None:
+    async def open_window(self, *, interrupt: bool = False) -> bool:
         """Mark the start of participant activity. Must be paired with
-        `close_window` -- an empty window still produces a hallucinated
-        reply, so only call this when there is genuine speech to capture."""
+        `close_window`. Returns True if ActivityStart was sent.
+
+        A new window right after ActivityEnd (before turn_complete) makes
+        the Live API close the socket with 1007. Those opens are deferred
+        unless `interrupt` is set (barge-in while Glad is talking).
+        """
         session = self._session
         if session is None or self._activity_open:
-            return
+            return False
+        if self._turn_pending and not interrupt:
+            self._open_when_idle = True
+            logger.info("Holding listen window — previous turn is still closing")
+            return False
         try:
             async with self._send_lock:
                 await session.send_realtime_input(activity_start=types.ActivityStart())
             self._activity_open = True
+            self._window_has_content = False
+            self._turn_pending = False
+            self._open_when_idle = False
         except Exception as exc:
             logger.warning("open_window failed (%s)", _close_reason(exc))
-            return
+            return False
         await self._flush_pending_context()
+        return True
 
-    async def close_window(self) -> None:
-        """Mark the end of participant activity. No-ops if none is open --
-        an unmatched ActivityEnd makes the Live API close the socket (1007)."""
+    async def close_window(self) -> bool:
+        """Mark the end of participant activity. Returns True if ActivityEnd
+        was sent. No-ops if none is open. An empty window (Start then End
+        with no audio/text) makes the Live API close the socket (1007), so
+        those stays open until something is actually in them."""
         session = self._session
         if session is None or not self._activity_open:
-            return
+            return False
+        if not self._window_has_content:
+            logger.info("Keeping listen window open — nothing in it yet")
+            return False
         try:
             async with self._send_lock:
                 await session.send_realtime_input(activity_end=types.ActivityEnd())
@@ -142,6 +186,8 @@ class LiveSession:
             logger.warning("close_window failed (%s)", _close_reason(exc))
         finally:
             self._activity_open = False
+            self._turn_pending = True
+        return True
 
     async def send_text(self, text: str) -> None:
         """Hand the model a text turn with no activity window at all. This
@@ -185,6 +231,8 @@ class LiveSession:
         except Exception as exc:
             logger.warning("send_context failed (%s)", _close_reason(exc))
             return
+        if self._activity_open:
+            self._window_has_content = True
         events.emit("context.sent", text=text, bytes=len(text.encode()))
 
     async def responses(self) -> AsyncIterator[tuple[bytes, bool, bool]]:
@@ -211,7 +259,11 @@ class LiveSession:
                 ) as session:
                     self._session = session
                     self._activity_open = False
+                    self._turn_pending = False
+                    self._window_has_content = False
                     connected_at = time.monotonic()
+                    if self._open_when_idle:
+                        await self.open_window()
                     # session.receive() yields exactly one turn then ends;
                     # call it again on the same connection to keep the
                     # conversation (and its context) going.
@@ -228,6 +280,19 @@ class LiveSession:
                                     "Live server sent go_away (time_left=%s); will reconnect",
                                     message.go_away.time_left,
                                 )
+
+                            content = message.server_content
+                            if content is not None and content.input_transcription and content.input_transcription.text:
+                                text = content.input_transcription.text
+                                phantom = is_phantom_input(text)
+                                if phantom:
+                                    self._discard_turn = True
+                                    logger.info("Heard (Gemini phantom, ignored): %s", text)
+                                else:
+                                    logger.info("Heard: %s", text)
+                                events.emit("input_transcript", text=text, phantom=phantom)
+                                if not phantom and self._input_transcript_listener is not None:
+                                    await self._input_transcript_listener(text)
 
                             if message.tool_call is not None:
                                 await self._handle_tool_call(session, message.tool_call)
@@ -247,14 +312,9 @@ class LiveSession:
                                     already_executed=True,
                                 )
 
-                            content = message.server_content
                             if content is None:
                                 continue
 
-                            if content.input_transcription and content.input_transcription.text:
-                                text = content.input_transcription.text
-                                logger.info("Heard: %s", text)
-                                events.emit("input_transcript", text=text)
                             if content.output_transcription and content.output_transcription.text:
                                 text = content.output_transcription.text
                                 logger.info("Gemini said: %s", text)
@@ -265,15 +325,23 @@ class LiveSession:
 
                             if content.interrupted:
                                 turn_grounded = False
+                                self._turn_pending = False
+                                self._discard_turn = False
                                 yield b"", True, False
+                                if self._open_when_idle:
+                                    await self.open_window()
                                 continue
-                            if content.model_turn:
+                            if content.model_turn and not self._discard_turn:
                                 for part in content.model_turn.parts or []:
                                     if part.inline_data and part.inline_data.data:
                                         yield part.inline_data.data, False, turn_grounded
                             if content.turn_complete:
+                                self._turn_pending = False
+                                self._discard_turn = False
                                 yield b"", False, turn_grounded
                                 turn_grounded = False
+                                if self._open_when_idle:
+                                    await self.open_window()
             except Exception as exc:
                 if self._closed:
                     return
@@ -310,7 +378,11 @@ class LiveSession:
         for call in calls:
             name = call.name or ""
             args = call.args or {}
-            result = await self._dispatch_tool(name, args)
+            if self._discard_turn:
+                logger.info("Not applying tool %s — Gemini phantom input", name)
+                result = {"ok": False, "error": "ignored: that was not room speech"}
+            else:
+                result = await self._dispatch_tool(name, args)
             responses.append(types.FunctionResponse(id=call.id, name=name, response=result))
 
         async with self._send_lock:

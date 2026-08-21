@@ -11,7 +11,7 @@ import pytest
 from websockets.exceptions import ConnectionClosedError
 from websockets.frames import Close
 
-from glad.live.session import LiveSession
+from glad.live.session import LiveSession, is_phantom_input
 
 
 def _session() -> LiveSession:
@@ -36,6 +36,7 @@ async def test_close_without_open_does_not_send_activity_end() -> None:
 async def test_open_then_close_sends_start_then_end() -> None:
     live = _session()
     await live.open_window()
+    live._window_has_content = True
     await live.close_window()
     calls = live._session.send_realtime_input.await_args_list
     assert len(calls) == 2
@@ -44,9 +45,54 @@ async def test_open_then_close_sends_start_then_end() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empty_window_is_not_ended() -> None:
+    """Start then End with no audio is a 1007. Keep the window open."""
+    live = _session()
+    await live.open_window()
+    live._session.send_realtime_input.reset_mock()
+    ended = await live.close_window()
+    assert ended is False
+    live._session.send_realtime_input.assert_not_awaited()
+    assert live.activity_open is True
+
+
+@pytest.mark.asyncio
+async def test_open_right_after_close_is_deferred() -> None:
+    """ActivityStart immediately after ActivityEnd is a 1007."""
+    live = _session()
+    await live.open_window()
+    live._window_has_content = True
+    await live.close_window()
+    live._session.send_realtime_input.reset_mock()
+
+    opened = await live.open_window()
+    assert opened is False
+    live._session.send_realtime_input.assert_not_awaited()
+    assert live._open_when_idle is True
+
+    live._turn_pending = False
+    opened = await live.open_window()
+    assert opened is True
+    assert "activity_start" in live._session.send_realtime_input.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_barge_in_opens_even_while_turn_pending() -> None:
+    live = _session()
+    await live.open_window()
+    live._window_has_content = True
+    await live.close_window()
+    live._session.send_realtime_input.reset_mock()
+    opened = await live.open_window(interrupt=True)
+    assert opened is True
+    assert "activity_start" in live._session.send_realtime_input.await_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_second_close_is_a_noop() -> None:
     live = _session()
     await live.open_window()
+    live._window_has_content = True
     await live.close_window()
     live._session.send_realtime_input.reset_mock()
     await live.close_window()
@@ -66,6 +112,7 @@ async def test_second_open_does_not_send_another_start() -> None:
 async def test_close_swallows_1007_and_clears_open_flag() -> None:
     live = _session()
     await live.open_window()
+    live._window_has_content = True
     live._session.send_realtime_input = AsyncMock(
         side_effect=ConnectionClosedError(
             rcvd=Close(code=1007, reason="Precondition check failed."),
@@ -99,3 +146,10 @@ async def test_send_context_during_open_window_goes_out_immediately() -> None:
     assert live._session.send_realtime_input.await_args.kwargs.get("text") == (
         "[People currently in this call: Alice]"
     )
+
+
+def test_stock_store_phrase_is_a_gemini_phantom() -> None:
+    assert is_phantom_input("I'm going to go to the store.")
+    assert is_phantom_input("going to the store")
+    assert not is_phantom_input("Hey glad, nice to meet you.")
+    assert not is_phantom_input("I'm going to the office.")

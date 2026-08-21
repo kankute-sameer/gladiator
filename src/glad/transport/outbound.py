@@ -78,6 +78,19 @@ async def send_bytes(data: bytes) -> None:
     _ensure_pacer_running()
 
 
+def has_queued_audio() -> bool:
+    """True if Gemini audio is still waiting to play at realtime."""
+    return bool(_pending)
+
+
+async def wait_drained() -> None:
+    """Wait until the realtime pacer has finished the queued reply."""
+    task = _pace_task
+    if task is None or task.done():
+        return
+    await task
+
+
 def _ensure_pacer_running() -> None:
     global _pace_task
     if _pace_task is None or _pace_task.done():

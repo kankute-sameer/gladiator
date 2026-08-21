@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from glad.agent.script import Question, QuestionSet
-from glad.agent.state import SessionState
+from glad.conversation.session import Question, QuestionSet, SessionState
 
 _QUESTION_SET = QuestionSet(
     id="test_set",

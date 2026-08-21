@@ -3,7 +3,7 @@ ambient speech to the next turn Glad takes."""
 
 from __future__ import annotations
 
-from glad.agent.ambient import AmbientBuffer
+from glad.conversation.turn import AmbientBuffer
 
 
 def test_empty_buffer_flushes_to_none() -> None:

@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from glad.agent.state import Roster
+from glad.conversation.session import Roster
 from glad.logging import get_logger
 from glad.obs import events
 

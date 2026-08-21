@@ -13,8 +13,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from glad.agent.script import load_question_set
-from glad.agent.tools import declarations as tool_declarations
+from glad.conversation.session import load_question_set
+from glad.conversation.tools import declarations as tool_declarations
 from glad.config import settings
 from glad.live.session import LiveSession
 from glad.logging import configure_logging, get_logger

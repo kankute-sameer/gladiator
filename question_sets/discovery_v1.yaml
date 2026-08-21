@@ -1,17 +1,13 @@
 id: discovery_v1
 version: 1
 questions:
-  - id: pain_point
-    text: "What's the main problem or pain point you're hoping to solve?"
-  # - id: current_solution
-  #   text: "What are you using today to handle this, if anything?"
-  # - id: team_size
-  #   text: "How many people would end up using this?"
-  # - id: budget
-  #   text: "Do you have a budget range in mind for this?"
-  # - id: timeline
-  #   text: "What's your timeline for making a decision or getting started?"
-  # - id: decision_process
-  #   text: "Who else, besides you, is involved in making this decision?"
-  # - id: success_criteria
-  #   text: "What would success look like for you six months after adopting this?"
+  - id: full_legal_name
+    text: "May I have your full legal name, please?"
+  - id: date_of_birth
+    text: "What is your date of birth?"
+  - id: current_employer
+    text: "Who is your current employer?"
+  - id: annual_income
+    text: "What is your approximate annual income?"
+  - id: employment_start_date
+    text: "When did you start working for your current employer?"

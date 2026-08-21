@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from glad.agent import script
+from glad.conversation import session as script
 
 
 def _write_set(tmp_path: Path, data: dict) -> None:

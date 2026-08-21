@@ -26,15 +26,6 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.1-flash-live-preview"
     gemini_voice: str = "Kore"
 
-    # TTL: how long Glad may keep speaking after it *finishes* a turn (the
-    # clock does not run while Glad is talking). Hard cap bounds a span
-    # even if stay_engaged keeps firing.
-    engagement_ttl_s: float = 10.0
-    engagement_hard_cap_s: float = 120.0
-    # Self-initiate: ask the next script question after this much floor-free
-    # silence, but not again until the cooldown elapses.
-    self_initiate_gap_s: float = 3.0
-    self_initiate_cooldown_s: float = 20.0
     # Drop frames below this RMS (0-1 full scale) before mixing.
     audio_gate_threshold: float = 0.02
 

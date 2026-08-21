@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from glad.agent.script import load_question_set
+from glad.conversation.session import load_question_set
 
 _QUESTION_SETS_DIR = Path(__file__).resolve().parents[1] / "question_sets"
 _SET_NAMES = sorted(p.stem for p in _QUESTION_SETS_DIR.glob("*.yaml"))

@@ -25,7 +25,7 @@
   </header>
 
   <main>
-    <section id="panel-latency" class="panel">
+    <section id="panel-latency" class="panel panel-wide">
       <h2>Latency</h2>
       <p class="panel-note">Every <code>glad_*_ms</code> metric seen in this run. n / p50 / p95 / p99, milliseconds.</p>
       <table id="latency-table">
@@ -40,9 +40,9 @@
       <h2>Timeline</h2>
       <div id="timeline-legend" class="legend"></div>
       <div id="timeline-scroll" class="timeline-scroll">
-        <svg id="timeline-svg" width="100%" height="150"></svg>
+        <svg id="timeline-svg"></svg>
+        <div id="timeline-empty" class="empty-note overlay">No timeline events yet.</div>
       </div>
-      <div id="timeline-empty" class="empty-note">No timeline events yet.</div>
     </section>
 
     <section id="panel-answers" class="panel">
@@ -67,15 +67,17 @@
       </table>
     </section>
 
-    <section id="panel-audio" class="panel">
+    <section id="panel-audio" class="panel panel-wide">
       <h2>Audio health</h2>
       <div class="audio-stats">
         <div><span class="stat-label">underruns</span><span id="stat-underruns" class="stat-value">--</span></div>
         <div><span class="stat-label">flush→ack p50 / p95</span><span id="stat-flush" class="stat-value">--</span></div>
         <div><span class="stat-label">buffer depth p50 / p95</span><span id="stat-depth" class="stat-value">--</span></div>
       </div>
-      <svg id="depth-svg" width="100%" height="120"></svg>
-      <div id="depth-empty" class="empty-note">No buffer-depth samples yet.</div>
+      <div id="depth-wrap" class="chart-wrap">
+        <svg id="depth-svg"></svg>
+        <div id="depth-empty" class="empty-note overlay">No buffer-depth samples yet.</div>
+      </div>
     </section>
 
     <section id="panel-events" class="panel panel-wide">

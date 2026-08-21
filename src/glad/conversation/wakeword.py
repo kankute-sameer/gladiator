@@ -10,7 +10,7 @@ It's an explicit rule list rather than a single regex, so the rules
 double as documentation of what counts as a vocative use.
 
 Detection only answers "was I addressed" -- whether Glad may actually
-speak right now is `glad.agent.floor`'s job.
+speak right now is `glad.conversation.turn`'s job.
 """
 
 from __future__ import annotations
@@ -21,7 +21,8 @@ from enum import Enum
 
 # Longest-first: "gladiator" must be tried before "glad" or the shorter
 # phrase would match its prefix. "gladiator"/"glad iator" ARE accepted as
-# a vocative (common ASR of the name); "clad"/"glide" are not.
+# a vocative (common ASR of the name). "clad" is also a common ASR of
+# "Glad" and goes through the same vocative rules. "glide" is not.
 _STAGE1_PHRASES: tuple[str, ...] = tuple(
     sorted(
         [
@@ -37,7 +38,7 @@ _STAGE1_PHRASES: tuple[str, ...] = tuple(
 )
 
 _WAKE_NEIGHBOURS = frozenset({"gladiator", "glad iator"})
-_NON_ADDRESSING_NEIGHBOURS = frozenset({"clad", "glide"})
+_NON_ADDRESSING_NEIGHBOURS = frozenset({"glide"})
 
 _WORD_RE = re.compile(r"[a-z0-9']+")
 
@@ -89,6 +90,8 @@ _NEGATIVE_PRECEDERS: tuple[str, ...] = (
     "im",
     "am",
 )
+# "Hey Glad, nice to meet you" is vocative even with no question after it.
+_GREETING_PRECEDERS = frozenset({"hey", "hi", "hello", "yo", "ok", "okay"})
 
 # "Glad, you there?" is vocative. "glad you called" is not.
 _PRESENCE_CUES = frozenset({"there", "here", "around", "listening", "ready", "awake", "up"})
@@ -206,6 +209,9 @@ def _disambiguate(tokens: list[str], match: Stage1Match) -> Stage2Verdict:
         return Stage2Verdict.ACCEPTED
     if following in _NEGATIVE_FOLLOWERS:
         return Stage2Verdict.SUPPRESSED_NEGATIVE_FOLLOWER
+
+    if preceding in _GREETING_PRECEDERS:
+        return Stage2Verdict.ACCEPTED
 
     # Positive signal 1: utterance-initial position ("Glad, ..." / "Glad?").
     if match.start_token == 0:

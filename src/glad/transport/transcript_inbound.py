@@ -2,7 +2,7 @@
 envelope -> TranscriptSegment -> fan out to a registered listener.
 
 Only decodes here. No normalization, wake word matching, or buffering --
-that's `glad.agent.wakeword` / `glad.agent.ambient`, fed by whatever
+that's `glad.conversation.wakeword` / the orchestrator, fed by whatever
 registers as the listener (the orchestrator).
 """
 

@@ -7,7 +7,7 @@ already accepted this".
 
 from __future__ import annotations
 
-from glad.agent.floor import FloorAction, FloorControl, FloorState
+from glad.conversation.turn import FloorAction, FloorControl, FloorState
 
 
 def test_discovery_speech_opens_window_directly_no_wake_needed() -> None:

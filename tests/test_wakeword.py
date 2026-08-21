@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import pytest
 
-from glad.agent.wakeword import Stage2Verdict, describe_verdict, detect
+from glad.conversation.wakeword import Stage2Verdict, describe_verdict, detect
 
 # Real vocatives: Glad is being addressed and should wake.
 _REAL_VOCATIVES = [
     "Glad, what do you think about that?",
     "Glad, can you check the budget question?",
     "Hey Glad, are you still there?",
+    "Hey Glad, nice to meet you",
+    "Hi Glad",
+    "Hello Glad, nice to meet you",
     "Glad, what's your take on this?",
     "Glad, tell us what you heard.",
     "Glad, how does that sound?",
@@ -20,6 +23,9 @@ _REAL_VOCATIVES = [
     "Hey Glad, you there?",
     "gladiator",
     "Glad iator, you there?",
+    "clad",
+    "hey clad",
+    "hi clad",
 ]
 
 # Adjectival / politeness uses: must be suppressed, never wake.
@@ -85,9 +91,15 @@ def test_no_match_returns_none_verdict() -> None:
     assert not result.woken
 
 
-def test_asr_neighbours_clad_and_glide_do_not_wake() -> None:
+def test_asr_clad_wakes_when_addressed() -> None:
+    assert detect("clad").woken
+    assert detect("hey clad").woken
     assert not detect("the walls are clad in oak panels").woken
+
+
+def test_asr_glide_does_not_wake() -> None:
     assert not detect("let the presentation glide through the slides").woken
+    assert not detect("glide").woken
 
 
 def test_case_and_punctuation_normalized() -> None:

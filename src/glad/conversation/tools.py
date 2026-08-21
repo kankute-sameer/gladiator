@@ -1,11 +1,4 @@
-"""Gemini function-calling glue: `declarations()` for connect-time config,
-`dispatch()` to route an incoming tool call to its handler.
-
-The `assert fn.__name__ == declaration.name` check in `declarations()` is
-deliberate: it makes renaming a handler without updating its declaration
-fail loudly at call time instead of silently drifting Gemini's idea of
-what's callable out of sync with what `dispatch` actually routes.
-"""
+"""Gemini tools: record_answer, go_dormant."""
 
 from __future__ import annotations
 
@@ -14,11 +7,55 @@ from typing import Any
 
 from google.genai import types
 
-from glad.agent.script import QuestionSet
-from glad.agent.state import SessionState
-from glad.agent.tools.go_dormant import go_dormant
-from glad.agent.tools.record_answer import record_answer
-from glad.agent.tools.stay_engaged import stay_engaged
+from glad.conversation.session import QuestionSet, SessionState
+
+_DISMISS_MARKERS = (
+    "dismiss",
+    "thanks",
+    "that's all",
+    "thats all",
+    "that is all",
+)
+_SCRIPT_MARKERS = (
+    "script_complete",
+    "script done",
+    "all questions",
+    "questions answered",
+)
+
+
+def record_answer(
+    state: SessionState,
+    question_id: str,
+    value: str,
+    participant_id: int | None = None,
+    participant_name: str | None = None,
+) -> dict[str, Any]:
+    try:
+        state.record(
+            question_id,
+            value,
+            participant_id=participant_id,
+            participant_name=participant_name,
+        )
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "remaining": [q.id for q in state.remaining()]}
+
+
+def classify_dormant_reason(state: SessionState, reason: str) -> str:
+    lowered = reason.lower()
+    if not state.remaining() or any(marker in lowered for marker in _SCRIPT_MARKERS):
+        return "script_complete"
+    if any(marker in lowered for marker in _DISMISS_MARKERS):
+        return "dismissed"
+    return "not_for_me"
+
+
+def go_dormant(state: SessionState, reason: str, **_ignored: Any) -> dict[str, Any]:
+    close = classify_dormant_reason(state, reason)
+    was = state.engagement.dismiss(close)
+    return {"ok": True, "reason": close, "was_engaged": was, "detail": reason}
 
 
 def _record_answer_declaration(question_set: QuestionSet) -> types.FunctionDeclaration:
@@ -51,38 +88,23 @@ def _record_answer_declaration(question_set: QuestionSet) -> types.FunctionDecla
     )
 
 
-def _stay_engaged_declaration(_question_set: QuestionSet) -> types.FunctionDeclaration:
-    return types.FunctionDeclaration(
-        name="stay_engaged",
-        description=(
-            "Refresh engagement so you may keep speaking. Call this whenever "
-            "the exchange with you is continuing -- a follow-up, a probe, a "
-            "clarification. No arguments. Do not wait on the result."
-        ),
-        parameters=types.Schema(type=types.Type.OBJECT, properties={}),
-    )
-
-
 def _go_dormant_declaration(_question_set: QuestionSet) -> types.FunctionDeclaration:
     return types.FunctionDeclaration(
         name="go_dormant",
         description=(
-            "Go silent. Any spoken audio in this turn that has not already "
-            "played is dropped the moment this tool runs — there is no way "
-            "to finish a sentence after it. If people should hear a short "
-            "sign-off, speak that line to completion first, then call this. "
-            "If they should hear nothing more, call this immediately. Call "
-            "only after an explicit dismissal ('thanks Glad', 'that's all') "
-            "or when every discovery question has an answer. Pass a short "
-            "reason. Do NOT call this on topic drift — just stay silent "
-            "and let engagement expire."
+            "Leave the conversation. Until you call this, you stay in it. "
+            "If you have not started speaking, remaining audio is discarded. "
+            "If you have already started a line, that line finishes, then "
+            "you go quiet. Call this FIRST (with no spoken line) when "
+            "speech is not for you. Never speak after this tool. "
+            "Pass a short reason."
         ),
         parameters=types.Schema(
             type=types.Type.OBJECT,
             properties={
                 "reason": types.Schema(
                     type=types.Type.STRING,
-                    description="Why you are going dormant (dismissed or script_complete).",
+                    description="Why you are going dormant (not_for_me, dismissed, or script_complete).",
                 ),
             },
             required=["reason"],
@@ -90,20 +112,15 @@ def _go_dormant_declaration(_question_set: QuestionSet) -> types.FunctionDeclara
     )
 
 
-# (handler, declaration builder) pairs. Add future tools here.
 _TOOLS: list[
     tuple[Callable[..., dict[str, Any]], Callable[[QuestionSet], types.FunctionDeclaration]]
 ] = [
     (record_answer, _record_answer_declaration),
-    (stay_engaged, _stay_engaged_declaration),
     (go_dormant, _go_dormant_declaration),
 ]
 
 
 def declarations(question_set: QuestionSet) -> list[types.FunctionDeclaration]:
-    """Gemini function declarations for `question_set`. `question_id` is a
-    closed enum of that set's ids -- Gemini cannot even construct a call
-    naming a question that doesn't exist in this bot's script."""
     built: list[types.FunctionDeclaration] = []
     for fn, build in _TOOLS:
         declaration = build(question_set)
@@ -119,9 +136,6 @@ _HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {fn.__name__: fn for fn, _
 
 
 def dispatch(name: str, args: dict[str, Any], state: SessionState) -> dict[str, Any]:
-    """Route one tool call by name to its handler. An unknown tool name
-    returns the same `{"ok": False, ...}` shape a handler's own
-    validation would."""
     handler = _HANDLERS.get(name)
     if handler is None:
         return {"ok": False, "error": f"Unknown tool: {name!r}"}

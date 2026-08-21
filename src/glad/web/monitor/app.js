@@ -236,28 +236,29 @@ function renderTimeline(events) {
   );
 
   const svg = els.timelineSvg;
-  if (items.length === 0 && !hasEngagement) {
+  const empty = items.length === 0 && !hasEngagement;
+  els.timelineEmpty.hidden = !empty;
+  if (empty) {
     svg.innerHTML = "";
-    els.timelineEmpty.style.display = "block";
     return;
   }
-  els.timelineEmpty.style.display = "none";
 
   const allTs = events.map((e) => e.ts).filter((t) => typeof t === "number");
   const minTs = Math.min(...allTs);
   const maxTs = Math.max(...allTs);
   const span = Math.max(maxTs - minTs, 1);
 
+  // Fixed user-space size so the SVG never measures the DOM (that feedback
+  // loop stretched every panel as the run got longer). CSS maps this to 100%.
+  const width = 1000;
   const labelWidth = 92;
-  const width = Math.max(els.timelineScroll.clientWidth || 800, 400);
   const plotWidth = width - labelWidth - 12;
   const laneHeight = 20;
   const topPad = 22;
   const height = topPad + TIMELINE_LANES.length * laneHeight + 10;
 
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("preserveAspectRatio", "none");
   svg.innerHTML = "";
 
   const tickEvery = span > 900 ? 120 : span > 300 ? 60 : span > 60 ? 15 : 5;
@@ -452,16 +453,15 @@ function renderAudioHealth(events) {
   const svg = els.depthSvg;
   if (depthSamples.length === 0) {
     svg.innerHTML = "";
-    els.depthEmpty.style.display = "block";
+    els.depthEmpty.hidden = false;
     return;
   }
-  els.depthEmpty.style.display = "none";
+  els.depthEmpty.hidden = true;
 
-  const width = Math.max((svg.parentElement && svg.parentElement.clientWidth) || 0, 300);
+  const width = 1000;
   const height = 120;
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("preserveAspectRatio", "none");
   svg.innerHTML = "";
 
   const tsValues = depthSamples.map((e) => e.ts);

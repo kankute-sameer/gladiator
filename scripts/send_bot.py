@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from glad.agent.script import load_question_set
+from glad.conversation.session import load_question_set
 from glad.config import settings
 from glad.logging import configure_logging, get_logger
 from glad.recall.client import RecallClient

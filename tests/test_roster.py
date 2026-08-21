@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from glad.agent.prompt import build_system_instruction, roster_context_line
-from glad.agent.script import Question, QuestionSet
-from glad.agent.state import Roster, SessionState
+from glad.conversation.prompt import build_system_instruction, roster_context_line
+from glad.conversation.session import Question, QuestionSet, Roster, SessionState
 from glad.transport import participants as participants_ws
 
 _QUESTION_SET = QuestionSet(
@@ -97,6 +96,10 @@ def test_prompt_empty_roster_says_none_identified() -> None:
     state = SessionState(session_id="s1", question_set=_QUESTION_SET)
     instruction = build_system_instruction(_QUESTION_SET, state)
     assert "(none identified yet)" in instruction
+    assert "go_dormant" in instruction
+    assert "stay_engaged" not in instruction
+    assert "discarded" in instruction
+    assert "get started" in instruction
 
 
 def test_roster_context_line_lists_people_and_skips_glad() -> None:

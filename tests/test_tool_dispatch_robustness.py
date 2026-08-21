@@ -13,9 +13,8 @@ from unittest.mock import AsyncMock
 import pytest
 from google.genai import types
 
-from glad.agent.script import Question, QuestionSet
-from glad.agent.state import SessionState
-from glad.agent.tools import dispatch
+from glad.conversation.session import Question, QuestionSet, SessionState
+from glad.conversation.tools import dispatch
 from glad.live.session import LiveSession
 
 _QUESTION_SET = QuestionSet(
@@ -114,3 +113,34 @@ async def test_two_function_calls_each_get_a_function_response() -> None:
     responses = kwargs["function_responses"]
     assert {r.id for r in responses} == {"call-1", "call-2"}
     assert all(r.response.get("ok") for r in responses)
+
+
+@pytest.mark.asyncio
+async def test_phantom_turn_does_not_run_tools_but_still_responds() -> None:
+    seen_calls: list[str] = []
+
+    async def recording_dispatcher(name: str, args: dict) -> dict:
+        seen_calls.append(name)
+        return {"ok": True}
+
+    session = LiveSession(
+        api_key="test-key",
+        model="test-model",
+        instruction_provider=lambda: "system instruction",
+        tool_dispatcher=recording_dispatcher,
+    )
+    session._discard_turn = True
+    mock_ws_session = AsyncMock()
+    tool_call = types.LiveServerToolCall(
+        function_calls=[types.FunctionCall(id="call-1", name="go_dormant", args={"reason": "not_for_me"})]
+    )
+
+    await session._handle_tool_call(mock_ws_session, tool_call)
+
+    assert seen_calls == []
+    mock_ws_session.send_tool_response.assert_awaited_once()
+    _, kwargs = mock_ws_session.send_tool_response.call_args
+    response = kwargs["function_responses"][0]
+    assert response.id == "call-1"
+    assert response.response.get("ok") is False
+    assert "not room speech" in response.response.get("error", "")
