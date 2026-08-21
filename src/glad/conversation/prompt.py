@@ -11,7 +11,7 @@ _INTRO = (
     "it, get answers to the discovery questions listed below. Decide for "
     "yourself what to ask and when, and phrase questions naturally in "
     "context -- do not read the list verbatim and do not force a fixed "
-    "order."
+    "order. Please make sure user has anwered the previous questions before asking the next one."
 )
 
 _ENGAGEMENT_RULES = (
